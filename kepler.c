@@ -8,6 +8,7 @@ typedef struct {
     double f;
     double e;
     double r;
+    double v;
     enum {
         PHASOR,
         RADIAN,
@@ -50,12 +51,15 @@ void kepler_dspss(t_kepler*const this, t_object const*const dsp64, double const*
     register double const a = fma(-e, e, 1);
     register double const b = sqrt(a);
     register double r = this->r;
+    register double v = this->v;
     register double*q = alloca(2*sizeof(double));
     for ( register long k = 0, K = length ; k < K ; ++ k ) {
         register double const l = a / fma(cospi(2 * r), e, 1);
+        register double const g = b / l / l;
         o[0][k] = l;
         o[1][k] = r;
-        r = modf(fma(b / l / l, f / fs, r), q);
+        r = modf(fma(g + v, f / fs / 2, r), q);
+        v = g;
     }
     switch ( this->m ) {
         case RADIAN:
@@ -67,6 +71,7 @@ void kepler_dspss(t_kepler*const this, t_object const*const dsp64, double const*
             break;
     }
     this->r = r;
+    this->v = v;
 }
 
 void kepler_dspvs(t_kepler*const this, t_object const*const dsp64, double const*const*const i, long const ic, double*const*const o, long const oc, long const length, long const flags, void*const parameter) {
@@ -75,13 +80,16 @@ void kepler_dspvs(t_kepler*const this, t_object const*const dsp64, double const*
     register double const a = fma(-e, e, 1);
     register double const b = sqrt(a);
     register double r = this->r;
+    register double v = this->v;
     register double*q = alloca(2*sizeof(double));
     for ( register long k = 0, K = length ; k < K ; ++ k ) {
         register double const f = i[0][k];
         register double const l = a / fma(cospi(2 * r), e, 1);
+        register double const g = b / l / l;
         o[0][k] = l;
         o[1][k] = r;
-        r = modf(fma(b / l / l, f / fs, r), q);
+        r = modf(fma(g + v, f / fs / 2, r), q);
+        v = g;
     }
     switch ( this->m ) {
         case RADIAN:
@@ -93,21 +101,25 @@ void kepler_dspvs(t_kepler*const this, t_object const*const dsp64, double const*
             break;
     }
     this->r = r;
+    this->v = v;
 }
 
 void kepler_dspsv(t_kepler*const this, t_object const*const dsp64, double const*const*const i, long const ic, double*const*const o, long const oc, long const length, long const flags, void*const parameter) {
     register double const fs = (uintptr_t const)parameter;
     register double const f = this->f;
     register double r = this->r;
+    register double v = this->v;
     register double*q = alloca(2*sizeof(double));
     for ( register long k = 0, K = length ; k < K ; ++ k ) {
         register double const e = i[1][k];
         register double const a = fma(-e, e, 1);
         register double const b = sqrt(a);
         register double const l = a / fma(cospi(2 * r), e, 1);
+        register double const g = b / l / l;
         o[0][k] = l;
         o[1][k] = r;
-        r = modf(fma(isnormal(l) ? b / l / l : 0, f / fs, r), q);
+        r = modf(fma(g + v, f / fs / 2, r), q);
+        v = g;
     }
     switch ( this->m ) {
         case RADIAN:
@@ -119,11 +131,13 @@ void kepler_dspsv(t_kepler*const this, t_object const*const dsp64, double const*
             break;
     }
     this->r = r;
+    this->v = v;
 }
 
 void kepler_dspvv(t_kepler*const this, t_object const*const dsp64, double const*const*const i, long const ic, double*const*const o, long const oc, long const length, long const flags, void*const parameter) {
     register double const fs = (uintptr_t const)parameter;
     register double r = this->r;
+    register double v = this->v;
     register double*q = alloca(2 * sizeof(double));
     for ( register long k = 0, K = length ; k < K ; ++ k ) {
         register double const f = i[0][k];
@@ -131,9 +145,11 @@ void kepler_dspvv(t_kepler*const this, t_object const*const dsp64, double const*
         register double const a = fma(-e, e, 1);
         register double const b = sqrt(a);
         register double const l = a / fma(cospi(2 * r), e, 1);
+        register double const g = b / l / l;
         o[0][k] = l;
         o[1][k] = r;
-        r = modf(fma(isnormal(l) ? b / l / l : 0, f / fs, r), q);
+        r = modf(fma(g + v, f / fs / 2, r), q);
+        v = g;
     }
     switch ( this->m ) {
         case RADIAN:
@@ -145,21 +161,24 @@ void kepler_dspvv(t_kepler*const this, t_object const*const dsp64, double const*
             break;
     }
     this->r = r;
+    this->v = v;
 }
 
 void kepler_dsp64(t_kepler*const this, t_object const*const dsp64, short const*const count, double const samplerate, long const maxvectorsize, long const flags) {
     t_symbol const * const symbol = gensym("dsp_add64");
     uintptr_t const parameter = samplerate;
+    this->r = 0;
+    this->v = sqrt(1 - this->e * this->e);
     if ( !count[2] && !count[3] )
-        object_method(dsp64, symbol, this, kepler_empty, this->r = 0, parameter);
+        object_method(dsp64, symbol, this, kepler_empty, 0, parameter);
     else if ( count[0] && count[1] )
-        object_method(dsp64, symbol, this, kepler_dspvv, this->r = 0, parameter);
+        object_method(dsp64, symbol, this, kepler_dspvv, 0, parameter);
     else if ( count[0] )
-        object_method(dsp64, symbol, this, kepler_dspvs, this->r = 0, parameter);
+        object_method(dsp64, symbol, this, kepler_dspvs, 0, parameter);
     else if ( count[1] )
-        object_method(dsp64, symbol, this, kepler_dspsv, this->r = 0, parameter);
+        object_method(dsp64, symbol, this, kepler_dspsv, 0, parameter);
     else
-        object_method(dsp64, symbol, this, kepler_dspss, this->r = 0, parameter);
+        object_method(dsp64, symbol, this, kepler_dspss, 0, parameter);
 }
 
 void kepler_float(t_kepler*const this, double const value) {
